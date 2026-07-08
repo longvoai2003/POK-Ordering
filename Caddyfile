@@ -1,4 +1,4 @@
-{
+longlol.shop {
     handle /api/* {
         reverse_proxy backend:8000
     }
