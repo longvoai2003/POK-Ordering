@@ -1,4 +1,4 @@
-longlol.shop {
+longlol.shop, www.longlol.shop {
     handle /api/* {
         reverse_proxy backend:8000
     }
@@ -14,4 +14,8 @@ longlol.shop {
     handle {
         reverse_proxy frontend:3000
     }
+}
+
+api.longlol.shop {
+    reverse_proxy backend:8000
 }
