@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pureorganic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pureorganic}
+      POSTGRES_DB: ${POSTGRES_DB:-pureorganic}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/migrations:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-pureorganic} -d ${POSTGRES_DB:-pureorganic}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pureorganic}:${POSTGRES_PASSWORD:-pureorganic}@postgres:5432/${POSTGRES_DB:-pureorganic}
+      POSTGRES_USER: ${POSTGRES_USER:-pureorganic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pureorganic}
+      POSTGRES_DB: ${POSTGRES_DB:-pureorganic}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-credentials.json
+      GOOGLE_SHEET_ID: ${GOOGLE_SHEET_ID}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      STAFF_PASSWORD: ${STAFF_PASSWORD}
+      BANK_NAME: ${BANK_NAME}
+      BANK_BIN: ${BANK_BIN}
+      BANK_ACCOUNT: ${BANK_ACCOUNT}
+      BANK_ACCOUNT_NAME: ${BANK_ACCOUNT_NAME}
+      SERVER_BASE_URL: ${SERVER_BASE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./secrets:/app/secrets:ro
+      - qr_data:/app/static/qr
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_BASE: ""
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  qr_data:
+  caddy_data:

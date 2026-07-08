@@ -1,0 +1,6 @@
+.env.local
+.env.development
+node_modules
+.git
+.next
+*.md

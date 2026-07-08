@@ -5,6 +5,15 @@ __pycache__/
 *.pyo
 data/
 .env
+.env.production
 *.log
 
+# Secrets
+secrets/
+*.pem
+*.key
 json_workflow/credentials.json
+
+# Docker volumes
+qr_data/
+caddy_data/
