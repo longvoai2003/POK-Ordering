@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pending_optionals JSONB NOT NULL DEFAULT '[]';

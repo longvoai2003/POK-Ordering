@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: pureorganic
+      POSTGRES_PASSWORD: pureorganic
+      POSTGRES_DB: pureorganic
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./migrations:/migrations
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pureorganic -d pureorganic"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./json_workflow/:/app/json_workflow:ro
+    env_file:
+      - .env
+    environment:
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://pureorganic:pureorganic@postgres:5432/pureorganic
+      GOOGLE_APPLICATION_CREDENTIALS: /app/json_workflow/credentials.json
+      GOOGLE_SHEET_ID: 1qwZwgZ4h9sQxGMJugxdY5ns_RNmP0dNSErL1wg_aXn0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

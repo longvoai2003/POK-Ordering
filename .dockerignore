@@ -1,0 +1,10 @@
+*.pyc
+__pycache__/
+.venv/
+.git/
+.pytest_cache/
+data/
+docs/
+*.log
+.env
+json_workflow/*

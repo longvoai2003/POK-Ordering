@@ -1,0 +1,8 @@
+version: "3"
+agent:
+  authtoken: ${NGROK_AUTHTOKEN}
+endpoints:
+  - name: webhook
+    url: http://app:8000
+    upstream:
+      url: 8000
