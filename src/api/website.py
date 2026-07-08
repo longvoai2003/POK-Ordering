@@ -24,7 +24,6 @@ from src.config import (
 
 from src.domain.core.payment import generate_vietqr, save_qr_png
 from src.domain.core.pricing import fmt_price
-from src.models.chef_request import ChefRequest
 from src.models.component import Component
 from src.models.order import Order, OrderItem
 from src.models.website import (
@@ -173,73 +172,6 @@ def _calculate_price(
             else:
                 total += comp.cost * (item.portion / comp.default_portion)
     return total
-
-
-def _build_chef_request(
-    order_id: str,
-    meal: dict[str, Optional[list[MealItem]]],
-    delivery: DeliveryInfo,
-    lookup: dict[str, Component],
-    total_price: float,
-    total_calories: float,
-    total_protein: float,
-    total_carbs: float,
-    total_fat: float,
-) -> ChefRequest:
-    def _get(cat: str) -> tuple[str, float]:
-        items = meal.get(cat)
-        if items is None or len(items) == 0:
-            return "", 0.0
-        names = []
-        total_portion = 0.0
-        for item in items:
-            comp = lookup.get(item.component_id)
-            if comp is not None:
-                names.append(comp.component_name)
-            total_portion += item.portion
-        return ", ".join(names), total_portion
-
-    b_name, b_portion = _get("base")
-    p_name, p_portion = _get("protein")
-    v_name, v_portion = _get("cook_veg")
-    rv_name, rv_portion = _get("raw_veg")
-    s_name, s_portion = _get("sauce")
-    t_name, t_portion = _get("topping")
-    e_name, e_portion = _get("egg")
-    o_name, o_portion = _get("cooking_oil")
-
-    return ChefRequest(
-        request_id=order_id,
-        customer_id="website",
-        channel="website",
-        customer_type="website",
-        full_name=delivery.full_name,
-        delivery_address=delivery.address,
-        phone_number=delivery.phone,
-        delivery_time="",
-        selected_base=b_name,
-        base_portion=b_portion,
-        selected_protein=p_name,
-        protein_portion=p_portion,
-        selected_cook_veg=v_name,
-        cook_veg_portion=v_portion,
-        selected_raw_veg=rv_name,
-        raw_veg_portion=rv_portion,
-        selected_sauce=s_name,
-        sauce_portion=s_portion,
-        selected_topping=t_name,
-        topping_portion=t_portion,
-        selected_egg=e_name,
-        egg_portion=e_portion,
-        selected_cooking_oil=o_name,
-        cooking_oil_portion=o_portion,
-        total_calories=total_calories,
-        total_protein=total_protein,
-        total_carbs=total_carbs,
-        total_fat=total_fat,
-        customer_notes=delivery.notes,
-        status="pending",
-    )
 
 
 def _format_telegram_message(
@@ -418,22 +350,10 @@ async def create_order(
         except Exception:
             logger.exception("VietQR generation failed")
 
-    chef_request = _build_chef_request(
-        order_id=order_id,
-        meal=request.meal,
-        delivery=request.delivery,
-        lookup=lookup,
-        total_price=total_price,
-        total_calories=total_calories,
-        total_protein=total_protein,
-        total_carbs=total_carbs,
-        total_fat=total_fat,
-    )
-
     try:
-        await chef_request_repo.create(chef_request)
+        await chef_request_repo.create_order_audit(order)
     except Exception:
-        logger.exception("Failed to persist chef request to sheets")
+        logger.exception("Failed to persist order audit to sheets")
 
     try:
         alert_text = _format_telegram_message(
