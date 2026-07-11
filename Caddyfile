@@ -11,6 +11,13 @@
     handle /payment/qr/* {
         reverse_proxy backend:8000
     }
+    handle /adminer* {
+        basicauth {
+            ${ADMINER_USER} ${ADMINER_PASSWORD_HASH}
+        }
+    }
+    reverse_proxy adminer:8080
+    }
     handle {
         reverse_proxy frontend:3000
     }
