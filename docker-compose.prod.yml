@@ -61,6 +61,9 @@ services:
     image: caddy:2-alpine
     expose:
       - "80"
+    environment:
+      ADMINER_USER: ${ADMINER_USER}
+      ADMINER_PASSWORD_HASH: ${ADMINER_PASSWORD_HASH}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

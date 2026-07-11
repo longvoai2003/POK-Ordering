@@ -13,10 +13,9 @@
     }
     handle /adminer* {
         basicauth {
-            ${ADMINER_USER} ${ADMINER_PASSWORD_HASH}
+            {$ADMINER_USER} {$ADMINER_PASSWORD_HASH}
         }
-    }
-    reverse_proxy adminer:8080
+        reverse_proxy adminer:8080
     }
     handle {
         reverse_proxy frontend:3000
