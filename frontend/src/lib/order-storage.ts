@@ -25,6 +25,8 @@ export interface CheckoutOrder {
   totalPrice: number;
   details: DeliveryDetails | null;
   createdAt: string;
+  orderId?: string;
+  source?: "draft" | "server";
 }
 
 export const EMPTY_DETAILS: DeliveryDetails = {
@@ -55,6 +57,19 @@ export function loadCheckoutOrder(): CheckoutOrder | null {
     window.localStorage.removeItem(ORDER_STORAGE_KEY);
     return null;
   }
+}
+
+export function loadCreateCheckoutOrder(): CheckoutOrder | null {
+  const order = loadCheckoutOrder();
+  if (!order) return null;
+  return order.source === "server" ? null : order;
+}
+
+export function loadEditCheckoutOrder(orderId: string | null): CheckoutOrder | null {
+  if (!orderId) return null;
+  const order = loadCheckoutOrder();
+  if (!order) return null;
+  return order.orderId === orderId ? order : null;
 }
 
 export function updateCheckoutOrder(patch: Partial<CheckoutOrder>): CheckoutOrder | null {
@@ -135,4 +150,9 @@ export function getRecentOrders(): RecentOrder[] {
   } catch {
     return [];
   }
+}
+
+export function saveRecentOrders(orders: RecentOrder[]): void {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(RECENT_ORDERS_KEY, JSON.stringify(orders));
 }

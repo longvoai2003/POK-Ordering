@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { formatVnd } from "@/lib/pricing";
 import {
     type OrderStatusResponse,
@@ -318,11 +319,17 @@ function PaymentContent() {
                             <div className="mt-2 text-xs font-bold leading-relaxed text-[#536342]">{order.delivery.address}</div>
                         </div>
                         <button
-                            onClick={() => router.push("/review")}
-                            className="mt-4 w-full rounded-2xl border border-[#cfc39f] bg-[#fffdf6] px-5 py-3 text-sm font-bold text-[#334b28] transition hover:border-[#8fae6e]"
+                            onClick={() => router.push(`/review?order_id=${orderId}`)}
+                            className="mt-2 w-full rounded-2xl border border-[#cfc39f] bg-[#fffdf6] px-5 py-3 text-sm font-bold text-[#334b28] transition hover:border-[#8fae6e]"
                         >
-                            Back to review
+                            Edit order
                         </button>
+                        <Link
+                            href={`/orders?order_id=${orderId}`}
+                            className="mt-2 block w-full rounded-2xl border border-[#cfc39f] bg-[#fffdf6] px-5 py-3 text-center text-sm font-bold text-[#334b28] transition hover:border-[#8fae6e]"
+                        >
+                            View order
+                        </Link>
                         <p className="mt-4 text-xs font-semibold leading-relaxed text-[#68775a]">
                             This checkout is processed by the FastAPI backend. QR codes are real VietQR when BANK_BIN is configured.
                         </p>

@@ -33,6 +33,7 @@ from src.models.website import (
     DeliveryInfo,
     MealItem,
     OrderStatusResponse,
+    UpdateOrderRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -369,6 +370,137 @@ async def create_order(
         qr_url=qr_url,
         bank_details=bank_details,
         status="pending",
+    )
+
+
+@router.patch("/orders/{order_id}")
+async def update_order(
+    order_id: str,
+    request: UpdateOrderRequest,
+    component_repo: GoogleSheetsComponentRepo = Depends(get_component_repo),
+    order_repo: PostgresOrderRepo = Depends(get_order_repo),
+) -> OrderStatusResponse:
+    existing = await order_repo.get_by_id(order_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if existing.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending orders can be edited",
+        )
+
+    components = await component_repo.get_all()
+    lookup: dict[str, Component] = {c.component_id: c for c in components}
+
+    errors = _validate_meal(request.meal, lookup)
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
+
+    _normalize_fixed_price_portions(request.meal, lookup)
+
+    total_price = int(round(_calculate_price(request.meal, lookup)))
+    total_calories = 0.0
+    total_protein = 0.0
+    total_carbs = 0.0
+    total_fat = 0.0
+
+    for items in request.meal.values():
+        if items is None:
+            continue
+        for item in items:
+            comp = lookup.get(item.component_id)
+            if comp is None or comp.default_portion <= 0:
+                continue
+            ratio = item.portion / comp.default_portion
+            total_calories += comp.calories * ratio
+            total_protein += comp.protein * ratio
+            total_carbs += comp.carbs * ratio
+            total_fat += comp.fat * ratio
+
+    order_items: list[OrderItem] = []
+    for cat in CATEGORY_DISPLAY_ORDER:
+        items = request.meal.get(cat)
+        if items is None:
+            continue
+        for item in items:
+            comp = lookup.get(item.component_id)
+            if comp is None:
+                continue
+            order_items.append(
+                OrderItem(
+                    order_id=order_id,
+                    category=cat,
+                    component_id=comp.component_id,
+                    component_name=comp.component_name,
+                    portion=item.portion,
+                    unit=comp.unit,
+                    cost=comp.cost * (item.portion / comp.default_portion)
+                    if comp.default_portion > 0
+                    else comp.cost,
+                )
+            )
+
+    updated_order = Order(
+        order_id=order_id,
+        channel=existing.channel,
+        status=existing.status,
+        payment_method=request.delivery.payment_method,
+        total_price=total_price,
+        full_name=request.delivery.full_name,
+        phone=request.delivery.phone,
+        address=request.delivery.address,
+        notes=request.delivery.notes,
+        total_calories=total_calories,
+        total_protein=total_protein,
+        total_carbs=total_carbs,
+        total_fat=total_fat,
+        qr_url=existing.qr_url,
+        items=order_items,
+    )
+
+    try:
+        persisted = await order_repo.update_order(updated_order)
+    except Exception:
+        logger.exception("Failed to update order in Postgres")
+        raise HTTPException(
+            status_code=503, detail="Unable to update order. Please try again."
+        )
+
+    if persisted is None:
+        raise HTTPException(status_code=404, detail="Order not found or no longer editable")
+
+    meal: dict[str, Optional[list[MealItem]]] = {}
+    for item in persisted.items:
+        cat_items = meal.get(item.category)
+        if cat_items is None:
+            cat_items = []
+            meal[item.category] = cat_items
+        cat_items.append(MealItem(component_id=item.component_id, portion=item.portion))
+
+    delivery = DeliveryInfo(
+        full_name=persisted.full_name,
+        phone=persisted.phone,
+        address=persisted.address,
+        notes=persisted.notes,
+        payment_method=persisted.payment_method,  # type: ignore[arg-type]
+    )
+
+    bank_details = None
+    if persisted.payment_method == "vietqr":
+        bank_details = {
+            "bank_name": BANK_NAME,
+            "account_number": BANK_ACCOUNT,
+            "account_name": BANK_ACCOUNT_NAME,
+        }
+
+    return OrderStatusResponse(
+        order_id=persisted.order_id,
+        status=persisted.status,
+        total_price=persisted.total_price,
+        qr_url=persisted.qr_url,
+        bank_details=bank_details,
+        delivery=delivery,
+        meal=meal,
     )
 
 

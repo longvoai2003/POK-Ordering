@@ -29,7 +29,7 @@ export function BowlSummary({ meal, macros, onClear, onContinue }: BowlSummaryPr
   const totalPrice = calculateMealPrice(meal);
 
   return (
-    <div className="border-t border-[#cfc39f] bg-[#fffdf6]/98 shadow-[0_-18px_40px_rgba(67,82,46,0.12)] backdrop-blur-xl lg:border lg:rounded-3xl lg:shadow-[0_22px_55px_rgba(61,89,50,0.14)]">
+    <div className="border-t border-[#cfc39f] bg-[#fffdf6]/98 shadow-[0_-18px_40px_rgba(67,82,46,0.12)] lg:border lg:rounded-3xl lg:shadow-[0_22px_55px_rgba(61,89,50,0.14)]">
       {/* Mobile: fixed bottom bar */}
       <div className="lg:hidden">
         {hasItems ? (

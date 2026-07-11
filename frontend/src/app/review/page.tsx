@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CATEGORY_LABELS, FIXED_PRICE_CATEGORIES, CATEGORY_DISPLAY_ORDER } from "@/lib/constants";
 import type { CategorySlug, Meal } from "@/lib/types";
-import { type CheckoutOrder, loadCheckoutOrder } from "@/lib/order-storage";
+import { type CheckoutOrder, loadCreateCheckoutOrder, loadEditCheckoutOrder, saveCheckoutOrder, saveRecentOrder } from "@/lib/order-storage";
 import { calculateIngredientPrice, formatVnd } from "@/lib/pricing";
-import { createOrder, type CreateOrderPayload } from "@/lib/api";
+import { createOrder, fetchMenu, getOrder, updateOrder, type CreateOrderPayload } from "@/lib/api";
 import { ApiError } from "@/lib/api-client";
 
 function formatPortion(portion: number, unit: string): string {
@@ -15,14 +15,111 @@ function formatPortion(portion: number, unit: string): string {
 }
 
 export default function ReviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen px-4 py-8">
+          <div className="organic-card mx-auto max-w-md rounded-3xl border border-[#cfc39f] p-7 text-center">
+            <p className="text-sm font-semibold text-[#68775a]">Loading...</p>
+          </div>
+        </main>
+      }
+    >
+      <ReviewPageContent />
+    </Suspense>
+  );
+}
+
+function ReviewPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editOrderId = searchParams.get("order_id");
   const [order, setOrder] = useState<CheckoutOrder | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
 
   useEffect(() => {
-    setOrder(loadCheckoutOrder());
-  }, []);
+    let cancelled = false;
+
+    if (editOrderId) {
+      const saved = loadEditCheckoutOrder(editOrderId);
+      if (saved) {
+        setOrder(saved);
+        setApiLoading(false);
+        return;
+      }
+
+      setApiLoading(true);
+      Promise.all([getOrder(editOrderId), fetchMenu()])
+        .then(([orderData, menuData]) => {
+          if (cancelled) return;
+
+          const mealFromOrder: Meal = {};
+          let calories = 0;
+          let protein = 0;
+          let carbs = 0;
+          let fat = 0;
+
+          for (const cat of CATEGORY_DISPLAY_ORDER) {
+            const items = orderData.meal[cat] ?? [];
+            const components = menuData.categories[cat] ?? [];
+            mealFromOrder[cat] = [];
+
+            for (const item of items) {
+              const component = components.find((c) => c.component_id === item.component_id);
+              if (!component) continue;
+
+              mealFromOrder[cat].push({ component, portion: item.portion });
+
+              const ratio = item.portion / component.default_portion;
+              calories += component.calories * ratio;
+              protein += component.protein * ratio;
+              carbs += component.carbs * ratio;
+              fat += component.fat * ratio;
+            }
+          }
+
+            const hydratedOrder: CheckoutOrder = {
+              meal: mealFromOrder,
+            macros: {
+              calories: Math.round(calories),
+              protein: Math.round(protein * 10) / 10,
+              carbs: Math.round(carbs * 10) / 10,
+              fat: Math.round(fat * 10) / 10,
+            },
+            totalPrice: orderData.total_price,
+            details: {
+              fullName: orderData.delivery.full_name,
+              phone: orderData.delivery.phone,
+              address: orderData.delivery.address,
+              notes: orderData.delivery.notes,
+              paymentMethod: orderData.delivery.payment_method,
+            },
+              createdAt: new Date().toISOString(),
+              orderId: editOrderId,
+              source: "server",
+            };
+
+          saveCheckoutOrder(hydratedOrder);
+          setOrder(hydratedOrder);
+          setApiLoading(false);
+        })
+        .catch(() => {
+          if (!cancelled) setApiLoading(false);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setOrder(loadCreateCheckoutOrder());
+    setApiLoading(false);
+  }, [editOrderId]);
+
+    const orderId = editOrderId ?? undefined;
+  const isEdit = orderId != null;
 
   const handleConfirm = async () => {
     if (!order || !order.details) return;
@@ -53,8 +150,31 @@ export default function ReviewPage() {
       },
     };
 
+    if (isEdit) {
+      try {
+        const response = await updateOrder(orderId!, payload);
+        router.push(`/payment?order_id=${response.order_id}`);
+      } catch (err) {
+        setSubmitError(
+          err instanceof ApiError
+            ? err.getMessage()
+            : "Could not update order. Please try again.",
+        );
+        setSubmitting(false);
+      }
+      return;
+    }
+
     try {
       const response = await createOrder(payload);
+      saveRecentOrder({
+        orderId: response.order_id,
+        date: new Date().toISOString(),
+        amount: response.total_price,
+        paymentMethod: order.details.paymentMethod,
+      });
+      const { clearCheckoutOrder } = await import("@/lib/order-storage");
+      clearCheckoutOrder();
       router.push(`/payment?order_id=${response.order_id}`);
     } catch (err) {
       setSubmitError(
@@ -71,6 +191,16 @@ export default function ReviewPage() {
         (order.meal[cat] ?? []).map((sel) => ({ cat: cat as CategorySlug, sel })),
       )
     : [];
+
+  if (apiLoading) {
+    return (
+      <main className="min-h-screen px-4 py-8">
+        <div className="organic-card mx-auto max-w-md rounded-3xl border border-[#cfc39f] p-7 text-center shadow-[0_22px_55px_rgba(61,89,50,0.12)]">
+          <p className="text-sm font-semibold text-[#68775a]">Loading order...</p>
+        </div>
+      </main>
+    );
+  }
 
   if (!order || entries.length === 0) {
     return (
@@ -114,8 +244,12 @@ export default function ReviewPage() {
         <header className="mb-5 flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-[#5e4318]">Review</p>
-            <h1 className="text-2xl font-extrabold text-[#1f321b]">Confirm Your Order</h1>
-            <p className="text-sm font-medium text-[#536342]">Check your bowl and delivery details before payment.</p>
+            <h1 className="text-2xl font-extrabold text-[#1f321b]">
+              {isEdit ? "Edit Your Order" : "Confirm Your Order"}
+            </h1>
+            <p className="text-sm font-medium text-[#536342]">
+              {isEdit ? "Review your changes before saving." : "Check your bowl and delivery details before payment."}
+            </p>
           </div>
         </header>
 
@@ -128,7 +262,7 @@ export default function ReviewPage() {
                   <p className="text-xs font-semibold text-[#68775a]">Every selected ingredient and portion.</p>
                 </div>
                 <button
-                  onClick={() => router.push("/build")}
+                  onClick={() => router.push(isEdit ? `/build?order_id=${orderId}` : "/build")}
                   className="rounded-full border border-[#cfc39f] bg-[#fffdf6] px-3 py-2 text-xs font-bold text-[#334b28]"
                 >
                   Edit
@@ -164,7 +298,7 @@ export default function ReviewPage() {
                   <p className="text-xs font-semibold text-[#68775a]">Where we will send it.</p>
                 </div>
                 <button
-                  onClick={() => router.push("/details")}
+                  onClick={() => router.push(isEdit ? `/details?order_id=${orderId}` : "/details")}
                   className="rounded-full border border-[#cfc39f] bg-[#fffdf6] px-3 py-2 text-xs font-bold text-[#334b28]"
                 >
                   Edit
@@ -212,7 +346,9 @@ export default function ReviewPage() {
               disabled={submitting}
               className="mt-5 w-full rounded-2xl bg-[#2f6f2d] px-5 py-3.5 text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(47,111,45,0.28)] transition hover:bg-[#245c24] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-[#b6ad92] disabled:text-[#f7f0dc] disabled:shadow-none"
             >
-              {submitting ? "Creating order..." : "Confirm order →"}
+              {submitting
+                ? isEdit ? "Saving..." : "Creating order..."
+                : isEdit ? "Save changes →" : "Confirm order →"}
             </button>
             {submitError && (
               <p className="mt-3 text-center text-xs font-semibold text-[#a84828]">{submitError}</p>

@@ -75,6 +75,79 @@ class PostgresOrderRepo(OrderRepo):
 
         return self._row_to_order(row)
 
+    async def update_order(self, order: Order) -> Order | None:
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    UPDATE orders SET
+                        full_name = $2, phone = $3, address = $4, notes = $5,
+                        total_price = $6,
+                        total_calories = $7, total_protein = $8,
+                        total_carbs = $9, total_fat = $10,
+                        updated_at = $11
+                    WHERE order_id = $1 AND status = 'pending'
+                    RETURNING *
+                    """,
+                    order.order_id,
+                    order.full_name,
+                    order.phone,
+                    order.address,
+                    order.notes,
+                    order.total_price,
+                    order.total_calories,
+                    order.total_protein,
+                    order.total_carbs,
+                    order.total_fat,
+                    now,
+                )
+                if row is None:
+                    return None
+
+                await conn.execute(
+                    "DELETE FROM order_items WHERE order_id = $1",
+                    order.order_id,
+                )
+                for item in order.items:
+                    await conn.execute(
+                        """
+                        INSERT INTO order_items (
+                            order_id, category, component_id, component_name,
+                            portion, unit, cost
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+                        """,
+                        item.order_id,
+                        item.category,
+                        item.component_id,
+                        item.component_name,
+                        item.portion,
+                        item.unit,
+                        item.cost,
+                    )
+
+        return Order(
+            order_id=row["order_id"],
+            channel=row["channel"],
+            status=row["status"],
+            payment_method=row["payment_method"],
+            total_price=float(row["total_price"]),
+            full_name=row["full_name"],
+            phone=row["phone"],
+            address=row["address"],
+            notes=row["notes"] or "",
+            total_calories=float(row["total_calories"]),
+            total_protein=float(row["total_protein"]),
+            total_carbs=float(row["total_carbs"]),
+            total_fat=float(row["total_fat"]),
+            qr_url=row["qr_url"],
+            paid_at=_from_timestamptz(row["paid_at"]),
+            created_at=_from_timestamptz(row["created_at"]) or "",
+            updated_at=_from_timestamptz(row["updated_at"]) or "",
+            items=order.items,
+        )
+
     async def get_by_id(self, order_id: str) -> Order | None:
         pool = await self._get_pool()
         row = await pool.fetchrow(

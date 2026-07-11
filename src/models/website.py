@@ -44,6 +44,11 @@ class CreateOrderRequest(BaseModel):
     delivery: DeliveryInfo
 
 
+class UpdateOrderRequest(BaseModel):
+    meal: dict[str, Optional[list[MealItem]]]
+    delivery: DeliveryInfo
+
+
 class CreateOrderResponse(BaseModel):
     order_id: str
     total_price: float

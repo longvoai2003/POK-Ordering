@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 from src.models.order import Order
 
 
@@ -7,6 +6,12 @@ class OrderRepo(ABC):
     @abstractmethod
     async def create(self, order: Order) -> Order | None:
         """Insert order. Returns Order on success, None if order_id already exists."""
+
+    @abstractmethod
+    async def update_order(self, order: Order) -> Order | None:
+        """Update an existing pending order (delivery fields + items).
+        Replaces order_items in a transaction. Returns None if order not found
+        or not pending."""
 
     @abstractmethod
     async def get_by_id(self, order_id: str) -> Order | None: ...

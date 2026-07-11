@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { CategorySection } from "@/components/CategorySection";
 import { BowlSummary } from "@/components/BowlSummary";
 import { MOCK_COMPONENTS } from "@/lib/mock-data";
@@ -14,9 +15,11 @@ import {
     MULTI_SELECT_CATEGORIES,
 } from "@/lib/constants";
 import type { Component, Meal, Macros, SelectedIngredient } from "@/lib/types";
+import type { CheckoutOrder } from "@/lib/order-storage";
 import { calculateMealPrice } from "@/lib/pricing";
-import { loadCheckoutOrder, saveCheckoutOrder } from "@/lib/order-storage";
-import { fetchMenu } from "@/lib/api";
+import { loadCreateCheckoutOrder, loadEditCheckoutOrder, saveCheckoutOrder, getRecentOrders } from "@/lib/order-storage";
+import { fetchMenu, getOrder } from "@/lib/api";
+import { ApiError } from "@/lib/api-client";
 import { MenuLoadingSkeleton } from "@/components/MenuLoadingSkeleton";
 
 function initMeal(saved?: Meal): Meal {
@@ -28,7 +31,23 @@ function initMeal(saved?: Meal): Meal {
 }
 
 export default function BuildPage() {
+    return (
+        <Suspense
+            fallback={
+                <main className="min-h-screen pb-40 lg:pb-10">
+                    <MenuLoadingSkeleton />
+                </main>
+            }
+        >
+            <BuildPageContent />
+        </Suspense>
+    );
+}
+
+function BuildPageContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const editOrderId = searchParams.get("order_id");
 
     const [meal, setMeal] = useState<Meal>(() => initMeal());
     const [activeByCategory, setActiveByCategory] = useState<Record<string, string | null>>({});
@@ -36,9 +55,55 @@ export default function BuildPage() {
     const [menuData, setMenuData] = useState<Record<string, Component[]>>(MOCK_COMPONENTS);
     const [menuLoading, setMenuLoading] = useState(true);
     const [menuError, setMenuError] = useState(false);
+    const [orderStatuses, setOrderStatuses] = useState<{ orderId: string; status: string }[]>([]);
 
     useEffect(() => {
-        const saved = loadCheckoutOrder();
+        const recent = getRecentOrders();
+        if (recent.length === 0) return;
+
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let prevKey = "";
+
+        const fetchStatuses = async () => {
+            const targets = recent.slice(0, 3);
+            const settled = await Promise.allSettled(
+                targets.map((r) => getOrder(r.orderId)),
+            );
+            if (cancelled) return;
+
+            const results: { orderId: string; status: string }[] = [];
+            for (let i = 0; i < targets.length; i++) {
+                const s = settled[i];
+                if (s.status === "fulfilled") {
+                    results.push({ orderId: targets[i].orderId, status: s.value.status });
+                } else if (!(s.reason instanceof ApiError && s.reason.status === 404)) {
+                    results.push({ orderId: targets[i].orderId, status: "unknown" });
+                }
+            }
+
+            const key = results.map((r) => `${r.orderId}:${r.status}`).join(",");
+            if (key !== prevKey) {
+                prevKey = key;
+                setOrderStatuses(results);
+            }
+
+            if (results.some((r) => r.status === "pending" || r.status === "payment_pending")) {
+                timer = setTimeout(fetchStatuses, 30_000);
+            }
+        };
+
+        timer = setTimeout(fetchStatuses, 2_000);
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
+    }, []);
+
+    useEffect(() => {
+        const saved = editOrderId
+            ? loadEditCheckoutOrder(editOrderId)
+            : loadCreateCheckoutOrder();
         if (saved?.meal) {
             setMeal(initMeal(saved.meal));
             setShowOptionals(
@@ -53,7 +118,7 @@ export default function BuildPage() {
             }
             setActiveByCategory(active);
         }
-    }, []);
+    }, [editOrderId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -72,6 +137,53 @@ export default function BuildPage() {
             });
         return () => { cancelled = true; };
     }, []);
+
+    useEffect(() => {
+        if (!editOrderId) return;
+        if (loadEditCheckoutOrder(editOrderId)) return;
+        let cancelled = false;
+        getOrder(editOrderId)
+            .then((data) => {
+                if (cancelled) return;
+                const nextMeal: Meal = {};
+                const nextActive: Record<string, string | null> = {};
+                for (const cat of CATEGORY_DISPLAY_ORDER) {
+                    nextMeal[cat] = [];
+                }
+                for (const cat of CATEGORY_DISPLAY_ORDER) {
+                    const items = data.meal[cat] ?? [];
+                    for (const item of items) {
+                        const comp = menuData[cat]?.find((c) => c.component_id === item.component_id);
+                        if (!comp) continue;
+                        nextMeal[cat] = [...(nextMeal[cat] ?? []), { component: comp, portion: item.portion } as SelectedIngredient];
+                        if (nextActive[cat] == null) nextActive[cat] = item.component_id;
+                    }
+                }
+                setMeal(nextMeal);
+                setActiveByCategory(nextActive);
+                setShowOptionals(OPTIONAL_CATEGORIES.some((cat) => (nextMeal[cat] ?? []).length > 0));
+                if (data.delivery) {
+                    const nextOrder = {
+                        meal: nextMeal,
+                        macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+                        totalPrice: data.total_price,
+                        details: {
+                            fullName: data.delivery.full_name,
+                            phone: data.delivery.phone,
+                            address: data.delivery.address,
+                            notes: data.delivery.notes,
+                            paymentMethod: data.delivery.payment_method,
+                        },
+                        createdAt: new Date().toISOString(),
+                        orderId: editOrderId,
+                        source: "server" as const,
+                    };
+                    saveCheckoutOrder(nextOrder);
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [editOrderId, menuData]);
 
     const handleSelect = useCallback((component: Component) => {
         const cat = component.category;
@@ -183,25 +295,48 @@ export default function BuildPage() {
     }, [meal]);
 
     const handleContinue = useCallback(() => {
-        const existingOrder = loadCheckoutOrder();
-        saveCheckoutOrder({
+        const existingOrder = editOrderId
+            ? loadEditCheckoutOrder(editOrderId)
+            : loadCreateCheckoutOrder();
+        const currentOrderId = editOrderId ?? undefined;
+        const nextOrder: CheckoutOrder = {
             meal,
             macros,
             totalPrice: calculateMealPrice(meal),
             details: existingOrder?.details ?? null,
             createdAt: existingOrder?.createdAt ?? new Date().toISOString(),
-        });
-        router.push("/details");
-    }, [router, meal, macros]);
+            orderId: currentOrderId,
+            source: editOrderId ? "server" : "draft",
+        };
+
+        saveCheckoutOrder(nextOrder);
+        const detailsPath = currentOrderId
+            ? `/details?order_id=${currentOrderId}`
+            : "/details";
+        router.push(detailsPath);
+    }, [router, meal, macros, editOrderId]);
 
     const requiredComplete = REQUIRED_CATEGORIES.every(
         (cat) => (meal[cat] ?? []).length > 0,
     );
 
+    const pendingCount = orderStatuses.filter((s) => s.status === "pending").length;
+    const verifyingCount = orderStatuses.filter((s) => s.status === "payment_pending").length;
+    const needsPayment = pendingCount + verifyingCount;
+    const paidCount = orderStatuses.filter((s) => s.status === "paid").length;
+    const firstPending = orderStatuses.find(
+        (s) => s.status === "pending" || s.status === "payment_pending",
+    );
+
+    const showSinglePending = needsPayment === 1 && firstPending && orderStatuses.length <= 3;
+    const ordersHref = showSinglePending
+        ? `/payment?order_id=${firstPending!.orderId}`
+        : "/orders";
+
     return (
         <main className="min-h-screen pb-40 lg:pb-10">
             {/* Header */}
-            <div className="sticky top-0 z-10 border-b border-[#cfc39f]/90 bg-[#fbf7ea]/92 backdrop-blur-xl">
+            <div className="sticky top-0 z-10 border-b border-[#cfc39f]/90 bg-[#fbf7ea]">
                 <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div>
                         <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-[#5e4318]">
@@ -221,16 +356,52 @@ export default function BuildPage() {
                         </p>
                     </div>
 
-                    {/* Progress dots */}
-                    <div className="flex gap-1.5">
-                        {CATEGORY_DISPLAY_ORDER.map((cat) => (
-                            <div
-                                key={cat}
-                                className={`w-2 h-2 rounded-full transition-colors ${(meal[cat] ?? []).length > 0 ? "bg-[#2f6f2d]" : "bg-[#bbae86]"
-                                    }`}
-                                title={CATEGORY_LABELS[cat]}
-                            />
-                        ))}
+                    {/* Progress dots + Orders button */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5">
+                            {CATEGORY_DISPLAY_ORDER.map((cat) => (
+                                <div
+                                    key={cat}
+                                    className={`w-2 h-2 rounded-full transition-colors ${(meal[cat] ?? []).length > 0 ? "bg-[#2f6f2d]" : "bg-[#bbae86]"
+                                        }`}
+                                    title={CATEGORY_LABELS[cat]}
+                                />
+                            ))}
+                        </div>
+
+                        {orderStatuses.length > 0 ? (
+                            showSinglePending ? (
+                                <Link
+                                    href={ordersHref}
+                                    className="rounded-full border border-[#d8bd69] bg-[#fff2c7] px-3 py-1.5 text-[11px] font-extrabold text-[#604513] transition hover:bg-[#ffe5a8] active:scale-95"
+                                >
+                                    {firstPending!.status === "payment_pending"
+                                        ? "Verifying..."
+                                        : "Complete Payment →"}
+                                </Link>
+                            ) : needsPayment > 0 ? (
+                                <Link
+                                    href={ordersHref}
+                                    className="rounded-full border border-[#d8bd69] bg-[#fff2c7] px-3 py-1.5 text-[11px] font-extrabold text-[#604513] transition hover:bg-[#ffe5a8] active:scale-95"
+                                >
+                                    {needsPayment} to pay
+                                </Link>
+                            ) : paidCount > 0 ? (
+                                <Link
+                                    href={ordersHref}
+                                    className="rounded-full border border-[#b9d49f] bg-[#dcefd1] px-3 py-1.5 text-[11px] font-extrabold text-[#2f6f2d] transition hover:bg-[#c8e0bc] active:scale-95"
+                                >
+                                    Orders ✓
+                                </Link>
+                            ) : null
+                        ) : (
+                            <Link
+                                href="/orders"
+                                className="rounded-full border border-[#cfc39f] bg-[#fffdf6] px-3 py-1.5 text-[11px] font-bold text-[#536342] transition hover:border-[#8fae6e] active:scale-95"
+                            >
+                                My Orders
+                            </Link>
+                        )}
                     </div>
                 </div>
             </div>

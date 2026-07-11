@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getOrder, type OrderStatusResponse } from "@/lib/api";
 import {
     getRecentOrders,
+    saveRecentOrders,
     type RecentOrder,
 } from "@/lib/order-storage";
 import { formatVnd } from "@/lib/pricing";
@@ -13,6 +14,11 @@ import { CATEGORY_LABELS, CATEGORY_DISPLAY_ORDER } from "@/lib/constants";
 import { ApiError } from "@/lib/api-client";
 
 const POLL_INTERVAL_MS = 10_000;
+
+interface RecentDatabaseOrder {
+    savedAt: string;
+    order: OrderStatusResponse;
+}
 
 function StatusBadge({ status }: { status: string }) {
     const c: Record<string, string> = {
@@ -39,6 +45,7 @@ function StatusBadge({ status }: { status: string }) {
 function OrderStatusCard({ order, showPoll }: { order: OrderStatusResponse; showPoll: boolean }) {
     const isVerifying = order.status === "payment_pending";
     const isPaid = order.status === "paid";
+    const isPending = order.status === "pending";
 
     const entries = CATEGORY_DISPLAY_ORDER.flatMap((cat) =>
         (order.meal[cat] ?? []).filter((sel) => sel != null).map((sel) => ({ cat, sel })),
@@ -91,6 +98,15 @@ function OrderStatusCard({ order, showPoll }: { order: OrderStatusResponse; show
                         Total
                     </div>
                 </div>
+
+                {isPending && (
+                    <Link
+                        href={`/payment?order_id=${order.order_id}`}
+                        className="block w-full rounded-2xl bg-[#2f6f2d] px-5 py-3 text-center text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(47,111,45,0.28)] transition hover:bg-[#245c24] active:scale-[0.99]"
+                    >
+                        Complete Payment →
+                    </Link>
+                )}
 
                 <div className="rounded-2xl border border-[#ded3ad] bg-[#fffdf6]/80 p-4">
                     <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[#6d5019]">
@@ -248,10 +264,62 @@ function OrderListContent() {
     const params = useSearchParams();
     const lookupId = params.get("order_id");
     const [inputId, setInputId] = useState("");
-    const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+    const [recentOrders, setRecentOrders] = useState<RecentDatabaseOrder[]>([]);
 
     useEffect(() => {
-        if (!lookupId) setRecentOrders(getRecentOrders());
+        if (lookupId) return;
+
+        let cancelled = false;
+        const localOrders = getRecentOrders();
+
+        const loadRecentOrders = async () => {
+            const results = await Promise.all(
+                localOrders.map(async (localOrder) => {
+                    try {
+                        return {
+                            localOrder,
+                            order: await getOrder(localOrder.orderId),
+                        };
+                    } catch (error) {
+                        return { localOrder, error };
+                    }
+                }),
+            );
+
+            if (cancelled) return;
+
+            const confirmed = results.filter(
+                (result): result is { localOrder: RecentOrder; order: OrderStatusResponse } =>
+                    "order" in result,
+            );
+            const missingIds = results
+                .filter(
+                    (result) =>
+                        "error" in result &&
+                        result.error instanceof ApiError &&
+                        result.error.status === 404,
+                )
+                .map((result) => result.localOrder.orderId);
+
+            if (missingIds.length > 0) {
+                saveRecentOrders(
+                    localOrders.filter((order) => !missingIds.includes(order.orderId)),
+                );
+            }
+
+            setRecentOrders(
+                confirmed.map(({ localOrder, order }) => ({
+                    savedAt: localOrder.date,
+                    order,
+                })),
+            );
+        };
+
+        void loadRecentOrders();
+
+        return () => {
+            cancelled = true;
+        };
     }, [lookupId]);
 
     if (lookupId) {
@@ -315,32 +383,33 @@ function OrderListContent() {
                         </h2>
                         <div className="overflow-hidden rounded-3xl border border-[#cfc39f] shadow-[0_22px_55px_rgba(61,89,50,0.08)]">
                             <div className="divide-y divide-[#ded3ad]">
-                                {recentOrders.map((o: RecentOrder) => (
+                                {recentOrders.map(({ savedAt, order }) => (
                                     <button
-                                        key={o.orderId}
+                                        key={order.order_id}
                                         onClick={() =>
                                             router.push(
-                                                `/orders?order_id=${encodeURIComponent(o.orderId)}`,
+                                                `/orders?order_id=${encodeURIComponent(order.order_id)}`,
                                             )
                                         }
                                         className="flex w-full items-center justify-between gap-3 bg-[#fffdf6] p-4 text-left transition hover:bg-[#fbf7ea]"
                                     >
                                         <div className="min-w-0">
                                             <code className="text-xs font-extrabold text-[#1f321b]">
-                                                {o.orderId}
+                                                {order.order_id}
                                             </code>
                                             <div className="mt-0.5 text-xs font-semibold text-[#68775a]">
-                                                {new Date(o.date).toLocaleDateString("vi-VN", {
+                                                {new Date(savedAt).toLocaleDateString("vi-VN", {
                                                     month: "2-digit",
                                                     day: "2-digit",
                                                 })}{" "}
                                                 ·{" "}
-                                                {o.paymentMethod === "vietqr" ? "VietQR" : "COD"}
+                                                {order.delivery.payment_method === "vietqr" ? "VietQR" : "COD"}
+                                                {" "}· {order.status}
                                             </div>
                                         </div>
                                         <div className="shrink-0 text-right">
                                             <div className="text-sm font-extrabold text-[#1f321b]">
-                                                {formatVnd(o.amount)}
+                                                {formatVnd(order.total_price)}
                                             </div>
                                         </div>
                                     </button>

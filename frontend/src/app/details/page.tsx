@@ -1,26 +1,89 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   EMPTY_DETAILS,
   type CheckoutOrder,
   type DeliveryDetails,
   loadCustomerDetails,
-  loadCheckoutOrder,
+  loadCreateCheckoutOrder,
+  loadEditCheckoutOrder,
+  saveCheckoutOrder,
   saveCustomerDetails,
   updateCheckoutOrder,
 } from "@/lib/order-storage";
 import { formatVnd } from "@/lib/pricing";
+import { getOrder } from "@/lib/api";
 
 export default function DetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen px-4 py-8">
+          <div className="organic-card mx-auto max-w-md rounded-3xl border border-[#cfc39f] p-7 text-center">
+            <p className="text-sm font-semibold text-[#68775a]">Loading...</p>
+          </div>
+        </main>
+      }
+    >
+      <DetailsPageContent />
+    </Suspense>
+  );
+}
+
+function DetailsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editOrderId = searchParams.get("order_id");
   const [order, setOrder] = useState<CheckoutOrder | null>(null);
   const [details, setDetails] = useState<DeliveryDetails>(EMPTY_DETAILS);
   const [submitted, setSubmitted] = useState(false);
+  const [apiLoading, setApiLoading] = useState(false);
 
   useEffect(() => {
-    const saved = loadCheckoutOrder();
+    if (editOrderId) {
+      const saved = loadEditCheckoutOrder(editOrderId);
+      if (saved) {
+        setOrder(saved);
+        if (saved.details) setDetails(saved.details);
+        setApiLoading(false);
+        return;
+      }
+
+      setApiLoading(true);
+      let cancelled = false;
+      getOrder(editOrderId)
+        .then((data) => {
+          if (cancelled) return;
+          const hydrated = {
+            meal: {},
+            macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+            totalPrice: data.total_price,
+            details: {
+              fullName: data.delivery.full_name,
+              phone: data.delivery.phone,
+              address: data.delivery.address,
+              notes: data.delivery.notes,
+              paymentMethod: data.delivery.payment_method,
+            },
+            createdAt: new Date().toISOString(),
+            orderId: editOrderId,
+            source: "server" as const,
+          };
+          saveCheckoutOrder(hydrated);
+          setOrder(hydrated);
+          setDetails(hydrated.details);
+          setApiLoading(false);
+        })
+        .catch(() => {
+          if (!cancelled) setApiLoading(false);
+        });
+      return () => { cancelled = true; };
+    }
+
+    const saved = loadCreateCheckoutOrder();
     const savedCustomer = loadCustomerDetails();
     setOrder(saved);
     if (saved?.details) {
@@ -33,9 +96,9 @@ export default function DetailsPage() {
         address: savedCustomer.address,
       }));
     }
-  }, []);
+  }, [editOrderId]);
 
-  const hasBowl = order != null && Object.values(order.meal).some(Boolean);
+  const hasBowl = editOrderId != null || (order != null && Object.values(order.meal).some(Boolean));
   const isValid =
     details.fullName.trim().length > 1 &&
     details.phone.trim().length >= 8 &&
@@ -54,8 +117,13 @@ export default function DetailsPage() {
       phone: details.phone,
       address: details.address,
     });
-    const next = updateCheckoutOrder({ details });
-    if (next) router.push("/review");
+    const next = updateCheckoutOrder({ details, orderId: editOrderId ?? undefined, source: editOrderId ? "server" : "draft" });
+    if (next) {
+      const reviewPath = editOrderId
+        ? `/review?order_id=${editOrderId}`
+        : "/review";
+      router.push(reviewPath);
+    }
   };
 
   if (!hasBowl) {
@@ -192,13 +260,13 @@ export default function DetailsPage() {
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-[#5e4318]">Order</p>
             <div className="mt-3 rounded-2xl border border-[#d8c98f] bg-[#fff8da] p-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6d5019]">Total</div>
-              <div className="mt-1 text-3xl font-extrabold text-[#1f321b]">{formatVnd(order.totalPrice)}</div>
+              <div className="mt-1 text-3xl font-extrabold text-[#1f321b]">{order ? formatVnd(order.totalPrice) : "—"}</div>
             </div>
             <div className="mt-4 grid grid-cols-4 gap-1 text-center text-xs">
-              <div><div className="font-extrabold text-[#1f321b]">{order.macros.calories}</div><div className="font-semibold text-[#6f654a]">cal</div></div>
-              <div><div className="font-extrabold text-[#1f321b]">{order.macros.protein}g</div><div className="font-semibold text-[#6f654a]">protein</div></div>
-              <div><div className="font-extrabold text-[#1f321b]">{order.macros.carbs}g</div><div className="font-semibold text-[#6f654a]">carbs</div></div>
-              <div><div className="font-extrabold text-[#1f321b]">{order.macros.fat}g</div><div className="font-semibold text-[#6f654a]">fat</div></div>
+              <div><div className="font-extrabold text-[#1f321b]">{order?.macros.calories ?? "—"}</div><div className="font-semibold text-[#6f654a]">cal</div></div>
+              <div><div className="font-extrabold text-[#1f321b]">{order?.macros.protein ?? "—"}g</div><div className="font-semibold text-[#6f654a]">protein</div></div>
+              <div><div className="font-extrabold text-[#1f321b]">{order?.macros.carbs ?? "—"}g</div><div className="font-semibold text-[#6f654a]">carbs</div></div>
+              <div><div className="font-extrabold text-[#1f321b]">{order?.macros.fat ?? "—"}g</div><div className="font-semibold text-[#6f654a]">fat</div></div>
             </div>
             <p className="mt-4 text-xs font-semibold leading-relaxed text-[#68775a]">
               This checkout is mocked locally for now. Backend order creation will replace localStorage later.

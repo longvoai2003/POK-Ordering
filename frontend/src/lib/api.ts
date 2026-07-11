@@ -76,6 +76,16 @@ export async function confirmPayment(orderId: string): Promise<{
   });
 }
 
+export async function updateOrder(
+  orderId: string,
+  payload: CreateOrderPayload,
+): Promise<OrderStatusResponse> {
+  return apiFetch<OrderStatusResponse>(`/api/orders/${orderId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 // ── Staff dashboard ──────────────────────────────────────────────────
 
 const TOKEN_KEY = "pureorganic.staff.token";
