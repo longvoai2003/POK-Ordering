@@ -121,8 +121,8 @@ export function SnappingSlider({
     return (
         <div className="w-full pt-1 pb-12">
             <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-[#334b28]">Portion</span>
-                <span className="rounded-full bg-[#dcefd1] px-3 py-1 text-sm font-extrabold text-[#234f23] ring-1 ring-[#a7c88e]">
+                <span className="text-base font-bold text-[#334b28]">Portion</span>
+                <span className="rounded-full bg-[#dcefd1] px-3 py-1 text-base font-extrabold text-[#234f23] ring-1 ring-[#a7c88e]">
                     {formatValue(displayValue)}
                 </span>
             </div>
@@ -154,11 +154,11 @@ export function SnappingSlider({
                 </div>
 
                 {/* Labels row */}
-                <div className="absolute left-0 right-0 top-full mt-8 overflow-hidden pb-7">
+                <div className="absolute left-0 right-0 top-full mt-8 overflow-visible pb-7">
                     {levels.map((level, idx) => (
                         <span
                             key={level}
-                            className={`absolute min-w-max text-[10px] font-semibold ${labelPositionClass(idx)} ${level === displayValue
+                            className={`absolute min-w-max text-xs font-semibold ${labelPositionClass(idx)} ${level === displayValue
                                     ? "text-[#245c24]"
                                     : "text-[#6f654a]"
                                 }`}

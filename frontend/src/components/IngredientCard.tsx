@@ -74,6 +74,9 @@ export const IngredientCard = memo(function IngredientCard({
             <p className="text-sm font-bold leading-tight text-[#1f321b]">
                 {component.component_name}
             </p>
+            <p className="hidden md:block text-xs font-medium text-[#586949] mt-0.5 line-clamp-1">
+                {component.description}
+            </p>
             {/* Macros disabled — nutrition data is inaccurate
             <p className="text-[10px] font-semibold text-[#6f654a] mt-0.5">
                 {component.calories.toFixed(0)}cal · P{component.protein.toFixed(1)}g
