@@ -158,7 +158,7 @@ export function SnappingSlider({
                     {levels.map((level, idx) => (
                         <span
                             key={level}
-                            className={`absolute min-w-max text-xs font-semibold ${labelPositionClass(idx)} ${level === displayValue
+                            className={`absolute min-w-max text-[13px] font-semibold ${labelPositionClass(idx)} ${level === displayValue
                                     ? "text-[#245c24]"
                                     : "text-[#6f654a]"
                                 }`}
