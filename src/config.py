@@ -45,6 +45,8 @@ REQUIRED_CATEGORIES = ["base", "protein", "cook_veg", "sauce"]
 
 OPTIONAL_CATEGORIES = ["raw_veg", "topping", "egg", "cooking_oil"]
 
+CATEGORY_MAX_ITEMS = {"base": 2, "protein": 2}
+
 CATEGORY_LABELS = {
     "base": "Base",
     "protein": "Protein",

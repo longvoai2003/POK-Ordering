@@ -219,7 +219,7 @@ export default function StaffOrderDetailPage({
             </div>
           </div>
 
-          {/* Macros */}
+          {/* Macros disabled — nutrition data is inaccurate
           <div className="organic-card rounded-3xl border border-[#cfc39f] p-5 shadow-[0_22px_55px_rgba(61,89,50,0.1)]">
             <h2 className="mb-3 text-lg font-extrabold text-[#1f321b]">
               Macros
@@ -259,6 +259,7 @@ export default function StaffOrderDetailPage({
               </div>
             </div>
           </div>
+          */}
 
           {/* Delivery + QR side by side */}
           <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">

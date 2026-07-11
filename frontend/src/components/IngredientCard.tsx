@@ -71,24 +71,15 @@ export const IngredientCard = memo(function IngredientCard({
                     </span>
                 )}
             </div>
-            <p className="line-clamp-2 min-h-[2.1rem] text-sm font-bold leading-tight text-[#1f321b]">
+            <p className="text-sm font-bold leading-tight text-[#1f321b]">
                 {component.component_name}
             </p>
-            <p className="text-xs font-medium text-[#586949] mt-0.5 line-clamp-1">
-                {component.description}
+            {/* Macros disabled — nutrition data is inaccurate
+            <p className="text-[10px] font-semibold text-[#6f654a] mt-0.5">
+                {component.calories.toFixed(0)}cal · P{component.protein.toFixed(1)}g
             </p>
-            <div className="flex flex-wrap gap-1 mt-1.5">
-                <span className="text-[10px] bg-[#efe2b9] text-[#523a10] px-1.5 py-0.5 rounded-full font-bold">
-                    {component.calories.toFixed(2)}cal
-                </span>
-                <span className="text-[10px] bg-[#dcefd1] text-[#285b28] px-1.5 py-0.5 rounded-full font-bold">
-                    P{component.protein.toFixed(2)}g
-                </span>
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#dfd3ae]/70 pt-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7a6b47]">
-                    {isFixedPrice ? "add-on" : isSelected ? "now" : "from"}
-                </span>
+            */}
+            <div className="mt-2 flex items-center justify-end border-t border-[#dfd3ae]/70 pt-2">
                 <span className="rounded-full bg-[#fff2c7] px-2 py-0.5 text-[11px] font-extrabold text-[#604513] ring-1 ring-[#d8bd69]">
                     {formatVnd(currentPrice)}
                 </span>

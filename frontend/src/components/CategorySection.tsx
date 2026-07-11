@@ -15,6 +15,7 @@ interface CategorySectionProps {
     selected: SelectedIngredient[];
     activeComponentId: string | null;
     isRequired: boolean;
+    maxItems?: number;
     onSelect: (component: Component) => void;
     onPortionChange: (componentId: string, portion: number) => void;
     onUnselect: (componentId: string, category: string) => void;
@@ -28,6 +29,7 @@ export const CategorySection = memo(function CategorySection({
     selected,
     activeComponentId,
     isRequired,
+    maxItems,
     onSelect,
     onPortionChange,
     onUnselect,
@@ -66,9 +68,6 @@ export const CategorySection = memo(function CategorySection({
                 </span>
                 <div className="min-w-0 flex-1">
                     <h2 className="truncate text-base font-bold text-[#1f321b]">{categoryLabel}</h2>
-                    {isFixedPrice && (
-                        <p className="mt-0.5 text-xs font-medium text-[#6b4e1f]">Tap once. Fixed price, no portion slider.</p>
-                    )}
                     {isMulti && selected.length > 0 && (
                         <p className="mt-0.5 text-xs font-semibold text-[#6f654a]">
                             {selected.length} selected · {formatVnd(totalPrice)}
@@ -86,9 +85,14 @@ export const CategorySection = memo(function CategorySection({
                             required
                         </span>
                     )}
+                    {maxItems != null && (
+                        <span className="rounded-full border border-[#cfc39f] bg-[#fffdf6] px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-[#6f654a]">
+                            max {maxItems}
+                        </span>
+                    )}
                     {isMulti && selected.length > 0 && (
                         <span className="rounded-full border border-[#366f2f] bg-[#4f8a48] px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm">
-                            {selected.length} selected
+                            {maxItems ? `${selected.length}/${maxItems}` : selected.length} selected
                         </span>
                     )}
                     {!isMulti && selected.length > 0 && (
@@ -140,13 +144,6 @@ export const CategorySection = memo(function CategorySection({
                     })}
                 </div>
             </div>
-
-            {showScrollHints && (
-                <div className="mt-1 flex items-center justify-end gap-1 px-1 text-[11px] font-semibold text-[#6f654a]">
-                    <span>Swipe for more</span>
-                    <span aria-hidden="true">→</span>
-                </div>
-            )}
 
             {showScrollHints && (
                 <div className="mt-1 flex justify-center gap-1.5" aria-hidden="true">

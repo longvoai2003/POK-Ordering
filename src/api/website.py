@@ -18,6 +18,7 @@ from src.config import (
     BANK_NAME,
     CATEGORY_DISPLAY_ORDER,
     CATEGORY_LABELS,
+    CATEGORY_MAX_ITEMS,
     CATEGORIES_WITH_FIXED_PRICE,
     REQUIRED_CATEGORIES,
 )
@@ -113,6 +114,12 @@ def _validate_meal(
     for cat, items in meal.items():
         if items is None:
             continue
+        max_items = CATEGORY_MAX_ITEMS.get(cat)
+        if max_items is not None and len(items) > max_items:
+            errors.append(
+                f"Too many items in {CATEGORY_LABELS.get(cat, cat)!r}: "
+                f"max {max_items}, got {len(items)}"
+            )
         for item in items:
             comp = lookup.get(item.component_id)
             if comp is None:

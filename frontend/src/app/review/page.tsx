@@ -335,12 +335,14 @@ function ReviewPageContent() {
               <div className="text-3xl font-extrabold text-[#1f321b]">{formatVnd(order.totalPrice)}</div>
               <div className="mt-1 text-xs font-semibold text-[#6f654a]">Mock total before delivery fee</div>
             </div>
+            {/* Macros disabled — nutrition data is inaccurate
             <div className="mt-4 grid grid-cols-4 gap-1 text-center text-xs">
               <div><div className="font-extrabold text-[#1f321b]">{order.macros.calories}</div><div className="font-semibold text-[#6f654a]">cal</div></div>
               <div><div className="font-extrabold text-[#1f321b]">{order.macros.protein}g</div><div className="font-semibold text-[#6f654a]">protein</div></div>
               <div><div className="font-extrabold text-[#1f321b]">{order.macros.carbs}g</div><div className="font-semibold text-[#6f654a]">carbs</div></div>
               <div><div className="font-extrabold text-[#1f321b]">{order.macros.fat}g</div><div className="font-semibold text-[#6f654a]">fat</div></div>
             </div>
+            */}
             <button
               onClick={handleConfirm}
               disabled={submitting}

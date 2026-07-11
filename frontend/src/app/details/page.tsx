@@ -262,12 +262,14 @@ function DetailsPageContent() {
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6d5019]">Total</div>
               <div className="mt-1 text-3xl font-extrabold text-[#1f321b]">{order ? formatVnd(order.totalPrice) : "—"}</div>
             </div>
+            {/* Macros disabled — nutrition data is inaccurate
             <div className="mt-4 grid grid-cols-4 gap-1 text-center text-xs">
               <div><div className="font-extrabold text-[#1f321b]">{order?.macros.calories ?? "—"}</div><div className="font-semibold text-[#6f654a]">cal</div></div>
               <div><div className="font-extrabold text-[#1f321b]">{order?.macros.protein ?? "—"}g</div><div className="font-semibold text-[#6f654a]">protein</div></div>
               <div><div className="font-extrabold text-[#1f321b]">{order?.macros.carbs ?? "—"}g</div><div className="font-semibold text-[#6f654a]">carbs</div></div>
               <div><div className="font-extrabold text-[#1f321b]">{order?.macros.fat ?? "—"}g</div><div className="font-semibold text-[#6f654a]">fat</div></div>
             </div>
+            */}
             <p className="mt-4 text-xs font-semibold leading-relaxed text-[#68775a]">
               This checkout is mocked locally for now. Backend order creation will replace localStorage later.
             </p>

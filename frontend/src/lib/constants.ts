@@ -39,6 +39,11 @@ export const MULTI_SELECT_CATEGORIES: CategorySlug[] = [
   "egg",
 ];
 
+export const CATEGORY_MAX_ITEMS: Partial<Record<CategorySlug, number>> = {
+  "base": 2,
+  "protein": 2,
+};
+
 export const CATEGORY_LABELS: Record<CategorySlug, string> = {
   base: "Base",
   protein: "Protein",

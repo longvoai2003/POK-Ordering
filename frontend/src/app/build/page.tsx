@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CategorySection } from "@/components/CategorySection";
@@ -13,6 +13,7 @@ import {
     CATEGORY_LABELS,
     CATEGORY_ICONS,
     MULTI_SELECT_CATEGORIES,
+    CATEGORY_MAX_ITEMS,
 } from "@/lib/constants";
 import type { Component, Meal, Macros, SelectedIngredient } from "@/lib/types";
 import type { CheckoutOrder } from "@/lib/order-storage";
@@ -56,6 +57,9 @@ function BuildPageContent() {
     const [menuLoading, setMenuLoading] = useState(true);
     const [menuError, setMenuError] = useState(false);
     const [orderStatuses, setOrderStatuses] = useState<{ orderId: string; status: string }[]>([]);
+    const [toast, setToast] = useState<string | null>(null);
+    const mealRef = useRef(meal);
+    mealRef.current = meal;
 
     useEffect(() => {
         const recent = getRecentOrders();
@@ -188,6 +192,21 @@ function BuildPageContent() {
     const handleSelect = useCallback((component: Component) => {
         const cat = component.category;
         const isMulti = MULTI_SELECT_CATEGORIES.includes(cat);
+
+        const currentItems = mealRef.current[cat] ?? [];
+        const alreadySelected = currentItems.some(
+            (s) => s.component.component_id === component.component_id,
+        );
+
+        if (isMulti && !alreadySelected) {
+            const maxItems = CATEGORY_MAX_ITEMS[cat as keyof typeof CATEGORY_MAX_ITEMS];
+            if (maxItems && currentItems.length >= maxItems) {
+                const label = CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS];
+                setToast(`Max ${maxItems} items in ${label}`);
+                setTimeout(() => setToast(null), 2500);
+                return;
+            }
+        }
 
         setMeal((prev) => {
             const items = prev[cat] ?? [];
@@ -345,15 +364,6 @@ function BuildPageContent() {
                         <h1 className="text-lg font-extrabold text-[#1f321b]">
                             Build Your Bowl
                         </h1>
-                        <p className="text-xs font-medium text-[#536342]">
-                            {menuLoading
-                                ? "Loading menu..."
-                                : menuError
-                                    ? "Offline — using cached menu"
-                                    : requiredComplete
-                                        ? "All set! Continue below"
-                                        : "Pick one from each required category"}
-                        </p>
                     </div>
 
                     {/* Progress dots + Orders button */}
@@ -406,6 +416,15 @@ function BuildPageContent() {
                 </div>
             </div>
 
+            {/* Toast notification */}
+            {toast && (
+                <div className="pointer-events-none fixed left-1/2 top-4 z-50 -translate-x-1/2 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
+                    <div className="rounded-full bg-[#1f321b] px-5 py-2.5 text-sm font-bold text-[#fff2c7] shadow-[0_10px_30px_rgba(31,50,27,0.35)] ring-1 ring-[#d8bd69]/40">
+                        {toast}
+                    </div>
+                </div>
+            )}
+
             {/* Main content area */}
             <div className="max-w-5xl mx-auto lg:flex lg:gap-6">
                 {/* Left: Category sections */}
@@ -426,6 +445,7 @@ function BuildPageContent() {
                                     selected={meal[cat] ?? []}
                                     activeComponentId={activeByCategory[cat] ?? null}
                                     isRequired={true}
+                                    maxItems={CATEGORY_MAX_ITEMS[cat as keyof typeof CATEGORY_MAX_ITEMS]}
                                     onSelect={handleSelect}
                                     onPortionChange={handlePortionChange}
                                     onUnselect={handleUnselect}
@@ -463,6 +483,7 @@ function BuildPageContent() {
                                         selected={meal[cat] ?? []}
                                         activeComponentId={activeByCategory[cat] ?? null}
                                         isRequired={false}
+                                        maxItems={CATEGORY_MAX_ITEMS[cat as keyof typeof CATEGORY_MAX_ITEMS]}
                                         onSelect={handleSelect}
                                         onPortionChange={handlePortionChange}
                                         onUnselect={handleUnselect}

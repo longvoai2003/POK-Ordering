@@ -1,9 +1,10 @@
 "use client";
 
+import { useRef, useState, type PointerEvent } from "react";
 import { type Meal, type Macros } from "@/lib/types";
 import { CATEGORY_LABELS, CATEGORY_DISPLAY_ORDER, FIXED_PRICE_CATEGORIES, REQUIRED_CATEGORIES } from "@/lib/constants";
 import type { CategorySlug } from "@/lib/types";
-import { calculateMealPrice, formatVnd } from "@/lib/pricing";
+import { calculateIngredientPrice, calculateMealPrice, formatVnd } from "@/lib/pricing";
 
 interface BowlSummaryProps {
   meal: Meal;
@@ -27,59 +28,95 @@ export function BowlSummary({ meal, macros, onClear, onContinue }: BowlSummaryPr
   ).length;
   const canContinue = requiredCount === REQUIRED_CATEGORIES.length;
   const totalPrice = calculateMealPrice(meal);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
+  const dragStartY = useRef<number | null>(null);
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    dragStartY.current = event.clientY;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (dragStartY.current === null) return;
+    const delta = event.clientY - dragStartY.current;
+    dragStartY.current = null;
+    if (Math.abs(delta) > 40) {
+      setMobileExpanded(delta < 0);
+    }
+  }
 
   return (
     <div className="border-t border-[#cfc39f] bg-[#fffdf6]/98 shadow-[0_-18px_40px_rgba(67,82,46,0.12)] lg:border lg:rounded-3xl lg:shadow-[0_22px_55px_rgba(61,89,50,0.14)]">
-      {/* Mobile: fixed bottom bar */}
+      {/* Mobile: draggable order sheet */}
       <div className="lg:hidden">
         {hasItems ? (
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-extrabold text-[#5e4318] uppercase tracking-[0.18em]">
-                Your Bowl
-              </span>
-              <button
-                onClick={onClear}
-                className="rounded-full border border-[#d8b4a5] bg-[#fff2ed] px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#9b3f24] shadow-sm transition hover:border-[#c76f55] hover:bg-[#ffe5dc] active:scale-95"
-              >
-                Clear
-              </button>
+          <div
+            className={`rounded-t-[2rem] bg-[#1f321b] px-4 text-[#fffdf6] shadow-[0_-18px_45px_rgba(31,50,27,0.24)] transition-[height] duration-300 ${mobileExpanded ? "h-[78vh]" : "h-[7.5rem]"}`}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+          >
+            <button
+              type="button"
+              aria-label={mobileExpanded ? "Collapse bowl details" : "Expand bowl details"}
+              onClick={() => setMobileExpanded((expanded) => !expanded)}
+              className="flex w-full flex-col items-center pt-3 pb-2"
+            >
+              <span className="h-1.5 w-16 rounded-full bg-[#b9c8a4]/70" />
+              <span className="sr-only">Swipe up to see your order details</span>
+            </button>
+
+            <div className="flex items-center justify-between border-b border-[#b9c8a4]/25 pb-3">
+              <div>
+                <div className="text-sm font-medium text-[#cbd6be]">Your Bowl</div>
+                <div className="text-xl font-extrabold leading-tight">{allItems.length} items</div>
+              </div>
+              <div className="text-2xl font-extrabold text-[#f3d36b]">{formatVnd(totalPrice)}</div>
             </div>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {allItems.map(({ cat, sel }) => (
-                <span
-                  key={`${cat}-${sel.component.component_id}`}
-                  className="text-xs bg-[#dcefd1] text-[#285b28] px-2 py-0.5 rounded-full font-bold"
-                >
-                  {sel.component.component_name}
-                  {!FIXED_PRICE_CATEGORIES.includes(cat as CategorySlug) &&
-                    ` ${formatPortion(sel.portion, sel.component.unit)}`}
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-base font-extrabold leading-none text-[#1f321b]">
-                  {formatVnd(totalPrice)}
+
+            {mobileExpanded && (
+              <div className="flex h-[calc(78vh-7.5rem)] flex-col overflow-hidden pt-4">
+                <div className="mb-3">
+                  <h3 className="text-2xl font-extrabold">Your Bowl</h3>
+                  <p className="mt-1 text-sm text-[#cbd6be]">Review your selections before continuing.</p>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] font-semibold text-[#536342]">
-                  <span>{macros.calories} cal</span>
-                  <span>P{macros.protein}g</span>
-                  <span>C{macros.carbs}g</span>
-                  <span>F{macros.fat}g</span>
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  {allItems.map(({ cat, sel }) => (
+                    <div
+                      key={`${cat}-${sel.component.component_id}`}
+                      className="flex items-center justify-between gap-3 border-b border-[#b9c8a4]/20 py-3 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[#f5f1df]">{sel.component.component_name}</div>
+                        <div className="mt-0.5 text-xs text-[#b9c8a4]">
+                          {CATEGORY_LABELS[cat]}{!FIXED_PRICE_CATEGORIES.includes(cat as CategorySlug) && ` · ${formatPortion(sel.portion, sel.component.unit)}`}
+                        </div>
+                      </div>
+                      <span className="shrink-0 font-bold text-[#f3d36b]">
+                        {formatVnd(calculateIngredientPrice(sel))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t-2 border-[#b9c8a4]/40 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium uppercase tracking-[0.16em] text-[#cbd6be]">Total</span>
+                    <span className="text-3xl font-extrabold text-[#f3d36b]">{formatVnd(totalPrice)}</span>
+                  </div>
+                  {/* Macros disabled — nutrition data is inaccurate
+                  <div className="mt-2 flex gap-3 text-xs text-[#cbd6be]">
+                    <span>{macros.calories} cal</span><span>P{macros.protein}g</span><span>C{macros.carbs}g</span><span>F{macros.fat}g</span>
+                  </div>
+                  */}
+                  <div className="mt-4 flex gap-2 pb-3">
+                    <button onClick={onClear} className="rounded-xl border border-[#b9c8a4]/40 px-4 py-3 text-sm font-bold text-[#dcefd1]">Clear</button>
+                    <button onClick={onContinue} disabled={!canContinue} className="flex-1 rounded-xl bg-[#77a878] py-3 text-sm font-extrabold text-white shadow-[0_12px_25px_rgba(47,111,45,0.28)] disabled:bg-[#596552]">Continue →</button>
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={onContinue}
-                disabled={!canContinue}
-                className="bg-[#2f6f2d] text-white text-sm font-bold px-5 py-2 rounded-xl shadow-[0_12px_25px_rgba(47,111,45,0.28)] transition-all hover:bg-[#245c24] active:scale-95 disabled:cursor-not-allowed disabled:bg-[#b6ad92] disabled:text-[#f7f0dc] disabled:shadow-none"
-              >
-                Continue →
-              </button>
-            </div>
+            )}
           </div>
         ) : (
-          <div className="px-4 py-3 text-center text-sm text-[#8f876f]">
+          <div className="rounded-t-[2rem] bg-[#fffdf6] px-4 py-4 text-center text-sm text-[#8f876f] shadow-[0_-18px_40px_rgba(67,82,46,0.12)]">
             Pick at least a base, protein, veggie &amp; sauce to get started
           </div>
         )}
@@ -132,6 +169,7 @@ export function BowlSummary({ meal, macros, onClear, onContinue }: BowlSummaryPr
                   {formatVnd(totalPrice)}
                 </div>
               </div>
+              {/* Macros disabled — nutrition data is inaccurate
               <div className="grid grid-cols-4 gap-1 text-center text-xs">
                 <div>
                   <div className="font-extrabold text-[#1f321b]">{macros.calories}</div>
@@ -150,6 +188,7 @@ export function BowlSummary({ meal, macros, onClear, onContinue }: BowlSummaryPr
                   <div className="font-semibold text-[#6f654a]">fat</div>
                 </div>
               </div>
+              */}
             </div>
 
             <button
